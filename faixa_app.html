@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de Faixa de Alimentos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f4f4f0; min-height: 100vh; padding: 2rem 1rem; color: #222; }
+    .container { max-width: 860px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 2rem; box-shadow: 0 2px 16px rgba(0,0,0,0.08); }
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+    p.sub { font-size: 14px; color: #666; margin-bottom: 1.5rem; }
+    .section-label { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    .config { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-end; }
+    .config-item { display: flex; flex-direction: column; gap: 6px; }
+    .config-item label { font-size: 13px; color: #555; }
+    select, input[type=color] { padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; background: #fff; cursor: pointer; }
+    input[type=color] { width: 48px; height: 36px; padding: 2px 4px; }
+
+    .slots-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 1.5rem; }
+    .slot {
+      aspect-ratio: 1/1; border-radius: 10px;
+      border: 2px dashed #ccc; background: #fafafa;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; position: relative; overflow: hidden; transition: border-color 0.2s;
+    }
+    .slot:hover { border-color: #378ADD; }
+    .slot.filled { border-style: solid; border-color: #ddd; }
+    .slot img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+    .slot .num { position: absolute; top: 4px; left: 6px; font-size: 11px; font-weight: 600; color: #555; background: rgba(255,255,255,0.85); border-radius: 4px; padding: 1px 5px; }
+    .slot .remove { position: absolute; top: 4px; right: 4px; background: rgba(255,255,255,0.9); border-radius: 50%; width: 20px; height: 20px; display: none; align-items: center; justify-content: center; font-size: 12px; cursor: pointer; color: #c0392b; border: none; font-weight: bold; }
+    .slot.filled:hover .remove { display: flex; }
+    .slot-icon { font-size: 24px; color: #bbb; margin-bottom: 4px; }
+    .slot-txt { font-size: 10px; color: #aaa; text-align: center; }
+
+    .preview-wrap { margin-bottom: 1.5rem; }
+    #preview-canvas { width: 100%; height: auto; border-radius: 8px; border: 1px solid #eee; display: block; }
+
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn { padding: 10px 22px; border-radius: 8px; border: 1px solid #ddd; background: #fff; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+    .btn:hover { background: #f0f0f0; }
+    .btn.primary { background: #378ADD; color: #fff; border-color: #378ADD; }
+    .btn.primary:hover { background: #185FA5; }
+    .btn.primary:disabled { background: #aaa; border-color: #aaa; cursor: not-allowed; }
+    .btn.danger { color: #c0392b; }
+
+    .status { margin-top: 10px; font-size: 13px; color: #888; }
+    .status.ok { color: #1D9E75; font-weight: 500; }
+    .status.warn { color: #BA7517; }
+
+    .bg-tip { font-size: 12px; color: #BA7517; background: #FAEEDA; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🍽️ Gerador de Faixa de Alimentos</h1>
+  <p class="sub">Combine até 6 fotos em uma faixa de 800×200px — sem alterar nada nos alimentos.</p>
+
+  <div class="config">
+    <div class="config-item">
+      <label>Quantidade de fotos</label>
+      <select id="qtd">
+        <option value="2">2 fotos — 400px cada</option>
+        <option value="3">3 fotos — 267px cada</option>
+        <option value="4">4 fotos — 200px cada</option>
+        <option value="5">5 fotos — 160px cada</option>
+        <option value="6" selected>6 fotos — 133px cada</option>
+      </select>
+    </div>
+    <div class="config-item">
+      <label>Cor do fundo</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="color" id="bg-color" value="#ffffff">
+        <select id="bg-preset">
+          <option value="#ffffff">Branco</option>
+          <option value="#f5f5f0">Creme</option>
+          <option value="#1a1a1a">Preto</option>
+          <option value="#f0ece4">Bege</option>
+          <option value="#2d4a2d">Verde escuro</option>
+          <option value="from-image">Da 1ª imagem</option>
+          <option value="custom">Personalizada</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-tip" id="bg-tip">O fundo será extraído automaticamente da primeira foto adicionada.</div>
+
+  <div class="section-label">Fotos (clique para adicionar)</div>
+  <div class="slots-grid" id="slots-grid"></div>
+
+  <div class="preview-wrap">
+    <div class="section-label" style="margin-bottom:8px;">Prévia — 800×200px</div>
+    <canvas id="preview-canvas" width="800" height="200"></canvas>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" id="btn-download" disabled>⬇ Baixar faixa PNG</button>
+    <button class="btn danger" id="btn-clear">🗑 Limpar tudo</button>
+  </div>
+  <div class="status" id="status">Adicione as fotos para gerar a faixa.</div>
+</div>
+
+<input type="file" id="file-input" accept="image/*" style="display:none">
+
+<script>
+  const W = 800, H = 200;
+  let total = 6;
+  let slots = Array(6).fill(null);
+  let bgColor = '#ffffff';
+  let bgMode = 'color';
+  let activeSlot = -1;
+
+  const grid = document.getElementById('slots-grid');
+  const canvas = document.getElementById('preview-canvas');
+  const ctx = canvas.getContext('2d');
+  const fileInput = document.getElementById('file-input');
+  const btnDownload = document.getElementById('btn-download');
+  const statusEl = document.getElementById('status');
+  const bgTip = document.getElementById('bg-tip');
+
+  function slotW(i) {
+    const base = Math.floor(W / total);
+    return i === total - 1 ? W - base * (total - 1) : base;
+  }
+  function slotX(i) { return Math.floor(W / total) * i; }
+
+  function buildGrid() {
+    grid.style.gridTemplateColumns = `repeat(${total}, 1fr)`;
+    grid.innerHTML = '';
+    for (let i = 0; i < total; i++) {
+      const div = document.createElement('div');
+      div.className = 'slot' + (slots[i] ? ' filled' : '');
+      if (slots[i]) {
+        div.innerHTML = `<img src="${slots[i].src}"><span class="num">${i+1}</span><button class="remove" data-i="${i}">✕</button>`;
+      } else {
+        div.innerHTML = `<span class="num">${i+1}</span><div class="slot-icon">+</div><div class="slot-txt">foto ${i+1}</div>`;
+      }
+      div.addEventListener('click', e => {
+        if (e.target.classList.contains('remove')) return;
+        activeSlot = i; fileInput.click();
+      });
+      const rm = div.querySelector('.remove');
+      if (rm) rm.addEventListener('click', e => { e.stopPropagation(); slots[i] = null; buildGrid(); render(); });
+      grid.appendChild(div);
+    }
+  }
+
+  function sampleBg(img) {
+    const tmp = document.createElement('canvas');
+    tmp.width = img.naturalWidth; tmp.height = img.naturalHeight;
+    const tc = tmp.getContext('2d');
+    tc.drawImage(img, 0, 0);
+    const w = tmp.width, h = tmp.height;
+    const pts = [[0,0],[w-1,0],[0,h-1],[w-1,h-1],[Math.floor(w/2),0],[Math.floor(w/2),h-1]];
+    let r=0,g=0,b=0;
+    for (const [x,y] of pts) { try { const d=tc.getImageData(x,y,1,1).data; r+=d[0];g+=d[1];b+=d[2]; } catch(e){} }
+    const n = pts.length;
+    return `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})`;
+  }
+
+  function render() {
+    const fill = (bgMode === 'from-image' && slots[0]) ? sampleBg(slots[0]) : bgColor;
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < total; i++) {
+      if (!slots[i]) continue;
+      const img = slots[i];
+      const x = slotX(i), sw = slotW(i);
+      const scale = Math.max(sw / img.naturalWidth, H / img.naturalHeight);
+      const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+      const ox = x + (sw - dw) / 2, oy = (H - dh) / 2;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, 0, sw, H); ctx.clip();
+      ctx.drawImage(img, ox, oy, dw, dh);
+      ctx.restore();
+    }
+    const filled = slots.slice(0, total).filter(Boolean).length;
+    const all = filled === total;
+    btnDownload.disabled = !all;
+    statusEl.textContent = all ? '✅ Faixa pronta! Clique em "Baixar faixa PNG".' : `${filled} de ${total} fotos adicionadas.`;
+    statusEl.className = 'status ' + (all ? 'ok' : 'warn');
+  }
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file || activeSlot < 0) return;
+    const img = new Image();
+    img.onload = () => { slots[activeSlot] = img; buildGrid(); render(); };
+    img.src = URL.createObjectURL(file);
+    fileInput.value = '';
+  });
+
+  document.getElementById('qtd').addEventListener('change', e => {
+    total = parseInt(e.target.value);
+    slots = Array(6).fill(null);
+    buildGrid(); render();
+  });
+
+  document.getElementById('bg-preset').addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === 'from-image') { bgMode = 'from-image'; bgTip.style.display = 'block'; }
+    else if (v === 'custom') { bgMode = 'color'; bgTip.style.display = 'none'; }
+    else { bgMode = 'color'; bgColor = v; document.getElementById('bg-color').value = v; bgTip.style.display = 'none'; }
+    render();
+  });
+
+  document.getElementById('bg-color').addEventListener('input', e => {
+    bgMode = 'color'; bgColor = e.target.value;
+    document.getElementById('bg-preset').value = 'custom';
+    bgTip.style.display = 'none';
+    render();
+  });
+
+  btnDownload.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.download = 'faixa_alimentos_800x200.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    slots = Array(6).fill(null); buildGrid(); render();
+  });
+
+  buildGrid(); render();
+</script>
+</body>
+</html>
